@@ -20,6 +20,9 @@ int main()
 	// create a camera manager object
 	auto& deviceManager = peak::DeviceManager::Instance();
 
+	// device val
+	shared_ptr < peak::core::Device> device = NULL;
+
 	try {
 		// update to search device
 		deviceManager.Update();
@@ -36,11 +39,82 @@ int main()
 		cout << devices[0]->SerialNumber() << endl;
 
 		// open the first camera
-		auto device = deviceManager.Devices().at(0)->OpenDevice(peak::core::DeviceAccessType::Control);
+		device = deviceManager.Devices().at(0)->OpenDevice(peak::core::DeviceAccessType::Control);
 
+		// Get the RemoteDevice NodeMap
+		auto nodeMapRemoteDevice = device->RemoteDevice()->NodeMaps().at(0);
+
+		// ExposureTime
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->SetValue(1000.0);
+		cout << "ExposureTime " << nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->Value() << endl;
+
+		// software trigger
+		// Before accessing TriggerSource, make sure TriggerSelector is set correctly
+		// Set Trigger Selector "ExposureStart"
+
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSelector")->SetCurrentEntry("ExposureStart");
+
+		// Determine the current entry of TriggerSource
+		std::string value = nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSource")->CurrentEntry()->SymbolicValue();
+		cout << "current Source: " << value << endl;
+
+		// Get a list of all available entries of TriggerSource
+		auto allEntries = nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSource")->Entries();
+
+		cout << "available entries:" << endl;
+		std::vector<std::shared_ptr<peak::core::nodes::EnumerationEntryNode>> availableEntries;
+		for (const auto& entry : allEntries)
+		{
+			if ((entry->AccessStatus() != peak::core::nodes::NodeAccessStatus::NotAvailable)
+				&& (entry->AccessStatus() != peak::core::nodes::NodeAccessStatus::NotImplemented))
+			{
+				availableEntries.emplace_back(entry);
+				cout << "\t"  << entry->SymbolicValue() << endl;
+			}
+		}
+
+		// Set TriggerSource to "Software"
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSource")->SetCurrentEntry("Software");
+
+	}
+	catch (const peak::core::OutOfRangeException& e)
+	{
+		// The value is out of range, e.g. higher than Maximum or lower than Minimum
+		std::cout << "Range EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
+	}
+	catch (const peak::core::BadAccessException& e)
+	{
+		// The NodeAccess was not suitable for the intended task, e.g. the node was ReadOnly
+		std::cout << "Read Only EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
+	}
+	catch (const peak::core::NotAvailableException& e)
+	{
+		// The node is not available, camera configuration could block current availability
+		std::cout << "Not Available EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
+	}
+	catch (const peak::core::NotFoundException& e)
+	{
+		// The node could not be found, check misspelling of the node name
+		std::cout << "Not Found EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
+	}
+	catch (const peak::core::NotImplementedException& e)
+	{
+		// The node is not implemented
+		std::cout << "Not Implemented EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
 	}
 	catch (const std::exception& e)
 	{
+		// all other exceptions
 		std::cout << "EXCEPTION: " << e.what() << std::endl;
 		peak::Library::Close();
 		return -2;
