@@ -3,9 +3,21 @@
 
 #include <iostream>
 
+#include <peak/peak.hpp>
+
 int main()
 {
-    std::cout << "Hello World!\n";
+	// initialize library
+	peak::Library::Initialize();
+	std::cout << "Library successfully initialized!" << std::endl;
+
+	// IDS peak version
+	auto peakVersion = peak::Library::Version();
+	std::cout << "Library version " << peakVersion.ToString() << std::endl;
+
+	// close library before exiting program
+	peak::Library::Close();
+	return 0;
 }
 
 // プログラムの実行: Ctrl + F5 または [デバッグ] > [デバッグなしで開始] メニュー
