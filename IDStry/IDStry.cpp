@@ -5,6 +5,8 @@
 
 #include <peak/peak.hpp>
 
+using namespace std;
+
 int main()
 {
 	// initialize library
@@ -14,6 +16,25 @@ int main()
 	// IDS peak version
 	auto peakVersion = peak::Library::Version();
 	std::cout << "Library version " << peakVersion.ToString() << std::endl;
+
+	// create a camera manager object
+	auto& deviceManager = peak::DeviceManager::Instance();
+
+	// update to search device
+	deviceManager.Update();
+	
+	// デバイス取得
+	auto devices = deviceManager.Devices();
+
+	// デバイス個数
+	auto deviceCount = devices.size();
+	cout << deviceCount << " devices found" << endl;
+
+	// デバイス情報
+	cout << devices[0]->DisplayName() << endl;
+	cout << devices[0]->SerialNumber() << endl;
+
+
 
 	// close library before exiting program
 	peak::Library::Close();
