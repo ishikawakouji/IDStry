@@ -20,21 +20,31 @@ int main()
 	// create a camera manager object
 	auto& deviceManager = peak::DeviceManager::Instance();
 
-	// update to search device
-	deviceManager.Update();
-	
-	// デバイス取得
-	auto devices = deviceManager.Devices();
+	try {
+		// update to search device
+		deviceManager.Update();
 
-	// デバイス個数
-	auto deviceCount = devices.size();
-	cout << deviceCount << " devices found" << endl;
+		// デバイス取得
+		auto devices = deviceManager.Devices();
 
-	// デバイス情報
-	cout << devices[0]->DisplayName() << endl;
-	cout << devices[0]->SerialNumber() << endl;
+		// デバイス個数
+		auto deviceCount = devices.size();
+		cout << deviceCount << " devices found" << endl;
 
+		// デバイス情報
+		cout << devices[0]->DisplayName() << endl;
+		cout << devices[0]->SerialNumber() << endl;
 
+		// open the first camera
+		auto device = deviceManager.Devices().at(0)->OpenDevice(peak::core::DeviceAccessType::Control);
+
+	}
+	catch (const std::exception& e)
+	{
+		std::cout << "EXCEPTION: " << e.what() << std::endl;
+		peak::Library::Close();
+		return -2;
+	}
 
 	// close library before exiting program
 	peak::Library::Close();
