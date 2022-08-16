@@ -3,7 +3,9 @@
 
 #include <iostream>
 
+#include <peak/converters/peak_buffer_converter_ipl.hpp>
 #include <peak/peak.hpp>
+#include <peak_ipl/peak_ipl.hpp>
 
 using namespace std;
 
@@ -48,6 +50,112 @@ int main()
 		nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->SetValue(1000.0);
 		cout << "ExposureTime " << nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->Value() << endl;
 
+		// pixel format
+		std::string format = nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("PixelFormat")->CurrentEntry()->SymbolicValue();
+		cout << "pixel format " << format << endl;
+
+		// acquisition準備
+		auto dataStreams = device->DataStreams();
+		if (dataStreams.empty()) {
+			cout << "no data stream" << endl;
+			return -1;
+		}
+
+		auto dataStream = dataStreams.at(0)->OpenDataStream();
+
+		// 古いバッファを消す
+		dataStream->Flush(peak::core::DataStreamFlushMode::DiscardAll);
+		for (const auto& buffer : dataStream->AnnouncedBuffers()) {
+			dataStream->RevokeBuffer(buffer);
+		}
+
+		// payload サイズ
+		int64_t payloadSize = nodeMapRemoteDevice->FindNode<peak::core::nodes::IntegerNode>("PayloadSize")->Value();
+
+		// 必要なバッファの数
+		size_t mumBuffersMinRequired = dataStream->NumBuffersAnnouncedMinRequired();
+		cout << mumBuffersMinRequired << " buffer requiered" << endl;
+
+		// バッファ確保
+		for (size_t count = 0; count < mumBuffersMinRequired; ++count) {
+			auto buffer = dataStream->AllocAndAnnounceBuffer(payloadSize, nullptr);
+			dataStream->QueueBuffer(buffer);
+		}
+
+		// まずはフリーラン
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSelector")->SetCurrentEntry("ExposureStart");
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerMode")->SetCurrentEntry("Off");
+		
+		// フレームレートを設定する
+		// set a frame rate to 10fps (or max value) since some of the trigger cases require a defined frame rate
+		auto frameRateMax = nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("AcquisitionFrameRate")->Maximum();
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("AcquisitionFrameRate")->SetValue(std::min(10.0, frameRateMax));
+
+		// define the number of images to acquire
+		uint64_t imageCountMax = 3;
+
+		// Lock critical features to prevent them from changing during acquisition
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::IntegerNode>("TLParamsLocked")->SetValue(1);
+
+		// start acquisition
+		dataStream->StartAcquisition(peak::core::AcquisitionStartMode::Default, imageCountMax);
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::CommandNode>("AcquisitionStart")->Execute();
+
+		// process the acquired images
+		uint64_t imageCount = 0;
+		char index = '0';
+		std::cout << std::endl << "First pixel value of each image: " << std::endl;
+		while (imageCount < imageCountMax)
+		{
+			// get buffer from datastream and create IDS peak IPL image from it
+			auto buffer = dataStream->WaitForFinishedBuffer(5000);
+			auto image = peak::BufferTo<peak::ipl::Image>(buffer); // なにもしなければ BayerRG8
+
+			// output first pixel value
+			std::cout << static_cast<uint16_t>(*image.PixelPointer(0, 0)) <<
+				" IPL pixcel info " << image.PixelFormat().Name() <<
+				" " << image.ByteCount() << " " << image.Width() << " x " << image.Height() << endl;
+
+			// save file
+			string filepath = "hgoe_";
+			filepath += index;
+			filepath +=".png";
+			peak::ipl::ImageWriter::Write(filepath, image);
+			
+
+			// queue buffer
+			dataStream->QueueBuffer(buffer);
+			++imageCount;
+			++index;
+		}
+		std::cout << std::endl << std::endl;
+
+		// stop acquistion of camera
+		try
+		{
+			dataStream->StopAcquisition(peak::core::AcquisitionStopMode::Default);
+		}
+		catch (const std::exception&)
+		{
+			// Some transport layers need no explicit acquisition stop of the datastream when starting its
+			// acquisition with a finite number of images. Ignoring Errors due to that TL behavior.
+
+			std::cout << "WARNING: Ignoring that TL failed to stop acquisition on datastream." << std::endl;
+		}
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::CommandNode>("AcquisitionStop")->Execute();
+
+		// Unlock parameters after acquisition stop
+		nodeMapRemoteDevice->FindNode<peak::core::nodes::IntegerNode>("TLParamsLocked")->SetValue(0);
+
+		// flush and revoke all buffers
+		dataStream->Flush(peak::core::DataStreamFlushMode::DiscardAll);
+		for (const auto& buffer : dataStream->AnnouncedBuffers())
+		{
+			dataStream->RevokeBuffer(buffer);
+		}
+
+		/*
+
 		// software trigger
 		// Before accessing TriggerSource, make sure TriggerSelector is set correctly
 		// Set Trigger Selector "ExposureStart"
@@ -75,6 +183,7 @@ int main()
 
 		// Set TriggerSource to "Software"
 		nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("TriggerSource")->SetCurrentEntry("Software");
+		*/
 
 	}
 	catch (const peak::core::OutOfRangeException& e)
