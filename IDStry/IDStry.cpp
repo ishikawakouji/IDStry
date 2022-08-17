@@ -50,6 +50,8 @@ int main()
 		nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->SetValue(1000.0);
 		cout << "ExposureTime " << nodeMapRemoteDevice->FindNode<peak::core::nodes::FloatNode>("ExposureTime")->Value() << endl;
 
+
+
 		// pixel format
 		std::string format = nodeMapRemoteDevice->FindNode<peak::core::nodes::EnumerationNode>("PixelFormat")->CurrentEntry()->SymbolicValue();
 		cout << "pixel format " << format << endl;
